@@ -3141,5 +3141,157 @@ async function gateGoogle(btn){
 try{gateAplicar()}catch(e){}
 
 </script>
+<script>
+/* ============ v6.3 — correção do login (gate resiliente) ============ */
+(function(){var s=document.createElement("style");
+ s.textContent=`#authgate .gerr{display:none}#authgate .gerr.on{display:block}
+ #authgate .gok{margin:10px 0 0;padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.45;
+  border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--fg2)}
+ #authgate .glink{background:none;border:0;color:var(--mut);font-size:12px;text-decoration:underline;cursor:pointer;margin-top:12px;width:100%}`;
+ document.head.appendChild(s)})();
+
+var OFFLINE_KEY="amalgama_offline";
+function offlineAtivo(){try{return localStorage.getItem(OFFLINE_KEY)==="1"}catch(e){return false}}
+function ativarOffline(){try{localStorage.setItem(OFFLINE_KEY,"1")}catch(e){}
+  try{var g=document.getElementById("authgate");if(g)g.remove()}catch(e){}
+  document.body.style.overflow="";
+  try{toast("Modo offline: seu progresso fica salvo neste dispositivo.")}catch(e){}}
+
+/* o gate libera o app quando há conta OU quando o usuário escolheu o modo offline */
+function gateLogado(){ return !!(window.fbUser && !fbUser.isAnonymous) || offlineAtivo(); }
+
+function gateDica(e){
+  var c=(e&&e.code)||"";
+  var host=location.hostname||"(arquivo local)";
+  if(location.protocol==="file:")
+    return "O login não funciona abrindo o arquivo direto do computador (<b>file://</b>). Use o endereço publicado (GitHub Pages) ou entre no modo offline.";
+  if(c==="auth/unauthorized-domain")
+    return "Domínio não autorizado: <b>"+host+"</b>.<br>Firebase Console → Authentication → Settings → <b>Authorized domains</b> → Add domain → <b>"+host+"</b>.";
+  if(c==="auth/operation-not-allowed"||c==="auth/configuration-not-found"||c==="auth/admin-restricted-operation")
+    return "Este método de login está <b>desativado</b> no Firebase.<br>Firebase Console → Authentication → <b>Sign-in method</b> → ative <b>E-mail/senha</b> e <b>Google</b>.<br>Enquanto isso você pode usar o <b>modo offline</b> abaixo.";
+  if(c==="auth/invalid-credential"||c==="auth/wrong-password") return "E-mail ou senha incorretos.";
+  if(c==="auth/user-not-found") return "Conta não encontrada — use <b>Criar conta</b>.";
+  if(c==="auth/email-already-in-use") return "E-mail já cadastrado — use <b>Entrar</b>.";
+  if(c==="auth/weak-password") return "Senha muito curta (mínimo 6 caracteres).";
+  if(c==="auth/popup-closed-by-user") return "Você fechou a janela do Google antes de concluir.";
+  if(c==="auth/network-request-failed") return "Sem conexão com a internet.";
+  return ((e&&e.message)||String(e))+(c?" <span style='opacity:.7'>("+c+")</span>":"");
+}
+
+function gateMontar(){
+  var ex=document.getElementById("authgate"); if(ex) return ex;
+  var g=document.createElement("div"); g.id="authgate";
+  var last=""; try{last=localStorage.getItem(GATE_KEY)||""}catch(e){}
+  var mail=(last&&last.indexOf("@")>0)?last:"";
+  g.innerHTML='<div class="gbox">'
+    +'<h2>Plano Amálgama de Estudos</h2>'
+    +'<p>Entre para sincronizar seus simulados, flashcards e aulas em todos os dispositivos.</p>'
+    +(last?'<p style="margin:-8px 0 14px">Último acesso neste dispositivo: <b>'+last+'</b></p>':'')
+    +'<button class="btn p" id="ggoogle" style="width:100%;justify-content:center">Entrar com Google</button>'
+    +'<div class="sep">ou use e-mail e senha</div>'
+    +'<input class="fld" id="gem" type="email" placeholder="seu@email.com" autocomplete="email" value="'+mail+'">'
+    +'<input class="fld" id="gpw" type="password" style="margin-top:8px" placeholder="senha (mín. 6 caracteres)" autocomplete="current-password">'
+    +'<div class="rowbtn" style="margin-top:10px"><button class="btn p" id="gin">Entrar</button>'
+    +'<button class="btn s" id="gnew">Criar conta</button>'
+    +'<button class="btn s" id="greset">Esqueci a senha</button></div>'
+    +'<div class="gerr" id="gerr"></div>'
+    +'<button class="glink" id="goff">Entrar sem conta (modo offline neste dispositivo)</button>'
+    +'<div class="gsm">Sessão salva com segurança neste navegador.</div>'
+    +'</div>';
+  document.body.appendChild(g);
+  var bg=g.querySelector("#ggoogle"); bg.onclick=function(){gateGoogle(bg)};
+  var bi=g.querySelector("#gin");     bi.onclick=function(){gateEmail(false,bi)};
+  var bn=g.querySelector("#gnew");    bn.onclick=function(){gateEmail(true,bn)};
+  g.querySelector("#goff").onclick=ativarOffline;
+  g.querySelector("#gem").onkeydown=function(ev){if(ev.key==="Enter")bi.click()};
+  g.querySelector("#gpw").onkeydown=function(ev){if(ev.key==="Enter")bi.click()};
+  g.querySelector("#greset").onclick=async function(){
+    var em=g.querySelector("#gem").value.trim(); if(!em) return gateErro("Digite seu e-mail.");
+    try{await firebase.auth().sendPasswordResetEmail(em);gateErro("Enviamos um e-mail de redefinição para <b>"+em+"</b>.")}
+    catch(e){gateErro(gateDica(e))}
+  };
+  if(location.protocol==="file:") setTimeout(function(){gateErro(gateDica({code:"file"}))},50);
+  return g;
+}
+
+function gateProv(){var p=new firebase.auth.GoogleAuthProvider();p.setCustomParameters({prompt:"select_account"});return p}
+
+async function gateGoogle(btn){
+  if(!window.firebase||!firebase.auth) return gateErro("Firebase indisponível nesta página. Verifique sua conexão e recarregue.");
+  if(location.protocol==="file:") return gateErro(gateDica({code:"file"}));
+  var txt=btn?btn.textContent:""; if(btn){btn.disabled=true;btn.textContent="Abrindo o Google..."}
+  try{
+    try{await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)}catch(_){}
+    var cur=firebase.auth().currentUser;
+    if(cur&&cur.isAnonymous){
+      try{ await cur.linkWithPopup(gateProv()); }
+      catch(e1){
+        if(e1.code==="auth/credential-already-in-use"||e1.code==="auth/email-already-in-use") await firebase.auth().signInWithPopup(gateProv());
+        else throw e1;
+      }
+    } else await firebase.auth().signInWithPopup(gateProv());
+    gateAplicar();
+  }catch(e){
+    var c=(e&&e.code)||"";
+    if(c==="auth/popup-blocked"||c==="auth/cancelled-popup-request"||c==="auth/operation-not-supported-in-this-environment"||c==="auth/web-storage-unsupported"){
+      gateErro("A janela pop-up foi bloqueada. Redirecionando para a página do Google...");
+      try{ await firebase.auth().signInWithRedirect(gateProv()); return; }catch(e2){ gateErro(gateDica(e2)) }
+    } else gateErro(gateDica(e));
+  }
+  if(btn){btn.disabled=false;btn.textContent=txt||"Entrar com Google"}
+}
+
+async function gateEmail(criar,btn){
+  var g=document.getElementById("authgate"); if(!g) return;
+  var em=g.querySelector("#gem").value.trim(), pw=g.querySelector("#gpw").value;
+  if(!em||em.indexOf("@")<1) return gateErro("Digite um e-mail válido.");
+  if(!pw||pw.length<6) return gateErro("Digite a senha (mínimo 6 caracteres).");
+  if(!window.firebase||!firebase.auth) return gateErro("Firebase indisponível nesta página.");
+  var txt=btn?btn.textContent:""; if(btn){btn.disabled=true;btn.textContent=criar?"Criando...":"Entrando..."}
+  try{
+    try{await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)}catch(_){}
+    var cur=firebase.auth().currentUser;
+    if(criar){
+      try{
+        if(cur&&cur.isAnonymous) await cur.linkWithCredential(firebase.auth.EmailAuthProvider.credential(em,pw));
+        else await firebase.auth().createUserWithEmailAndPassword(em,pw);
+      }catch(e1){
+        if(e1.code==="auth/email-already-in-use"||e1.code==="auth/credential-already-in-use") await firebase.auth().signInWithEmailAndPassword(em,pw);
+        else throw e1;
+      }
+    } else {
+      try{ await firebase.auth().signInWithEmailAndPassword(em,pw); }
+      catch(e1){
+        if(e1.code==="auth/user-not-found") await firebase.auth().createUserWithEmailAndPassword(em,pw);
+        else throw e1;
+      }
+    }
+    gateAplicar();
+  }catch(e){ gateErro(gateDica(e)); }
+  if(btn){btn.disabled=false;btn.textContent=txt||(criar?"Criar conta":"Entrar")}
+}
+
+/* resultado do login por redirecionamento (celular / pop-up bloqueado) */
+(function(){
+  var t=setInterval(function(){
+    if(!window.firebase||!firebase.auth) return;
+    clearInterval(t);
+    firebase.auth().getRedirectResult()
+      .then(function(r){ if(r&&r.user) gateAplicar(); })
+      .catch(function(e){ if(e&&e.code&&e.code!=="auth/no-auth-event") gateErro(gateDica(e)); });
+  },300);
+  setTimeout(function(){clearInterval(t)},10000);
+})();
+
+/* se o gate ficar preso mais de 12s sem Firebase, oferece o modo offline */
+setTimeout(function(){
+  if(document.getElementById("authgate") && (!window.firebase||!firebase.auth))
+    gateErro("Não foi possível carregar o Firebase (conexão ou bloqueador). Use o <b>modo offline</b> abaixo.");
+},12000);
+
+try{ if(offlineAtivo()) gateAplicar(); }catch(e){}
+try{ gateAplicar(); }catch(e){}
+</script>
+
 </body>
 </html>
