@@ -2559,6 +2559,159 @@ function gateMontar(){
   setTimeout(function(){clearInterval(t)},8000);
 })();
 
+
+/* ================= v7: leitura natural + questoes ================= */
+/* --- 1) selecao de voz: prioriza vozes neurais/naturais em pt-BR --- */
+function lrNota(v){
+  var n=(v.name||"")+" "+(v.voiceURI||""), s=0;
+  if(/pt[-_]BR/i.test(v.lang)) s+=40; else if(/pt/i.test(v.lang)) s+=10;
+  if(/natural|neural|online|wavenet|studio|premium|enhanced/i.test(n)) s+=30;
+  if(/google/i.test(n)) s+=22;
+  if(/microsoft/i.test(n)) s+=14;
+  if(/francisca|thalita|luciana|brenda|elza|ant[oô]nio|fabio|f[aá]bio|dani(ela|el)/i.test(n)) s+=12;
+  if(/compact|espeak|festival|pico|robot/i.test(n)) s-=25;
+  if(v.localService) s-=6;
+  return s;
+}
+function lrVozes(){
+  try{
+    var vs=(LRV?LRV.getVoices():[]).filter(function(v){return /pt/i.test(v.lang)});
+    return vs.sort(function(a,b){return lrNota(b)-lrNota(a)});
+  }catch(_){return []}
+}
+function lrVoz(){var vs=lrVozes();return vs.filter(function(v){return v.voiceURI===lrVozURI})[0]||vs[0]||null}
+
+/* --- 2) humanizacao do texto: abreviacoes, simbolos e pausas --- */
+function lrHumanizar(t){
+  t=String(t||"");
+  t=t.replace(/\u00a7\s*(\d+)/g,"parágrafo $1").replace(/\u00a7/g,"parágrafo");
+  t=t.replace(/\bArts?\.\s*/gi,"Artigo ");
+  t=t.replace(/\bIncs?\.\s*/gi,"inciso ");
+  t=t.replace(/\bCF\/88\b/g,"Constituição Federal de 1988").replace(/\bCF\b/g,"Constituição Federal");
+  t=t.replace(/\bCTB\b/g,"Código de Trânsito Brasileiro");
+  t=t.replace(/\bn[º°]\s*/gi,"número ").replace(/\bnº/gi,"número ");
+  t=t.replace(/\bR\$\s*/g,"reais ");
+  t=t.replace(/(\d)\.(\d{3})\b/g,"$1$2");
+  t=t.replace(/\bp\.\s*ex\.?/gi,"por exemplo").replace(/\bex\.:/gi,"exemplo:");
+  t=t.replace(/\betc\./gi,"etcétera").replace(/\bobs\.:/gi,"observação:");
+  t=t.replace(/\s*[-–—]\s*/g,", ");
+  t=t.replace(/\s*\/\s*/g," barra ");
+  t=t.replace(/\s+/g," ").trim();
+  return t;
+}
+/* frases mais curtas = entonacao melhor; corta tambem em virgulas de frases longas */
+function lrPartir(txt){
+  var brutas=(String(txt||"").match(/[^.!?;:\n]+[.!?;:\n]*/g)||[String(txt||"")]);
+  var out=[];
+  brutas.forEach(function(f){
+    f=lrHumanizar(f);
+    if(f.length<2) return;
+    if(f.length<=170){out.push(f);return}
+    var buf="";
+    f.split(/,\s*/).forEach(function(p){
+      if((buf+" "+p).trim().length>170&&buf){out.push(buf.trim());buf=p}
+      else buf=(buf?buf+", ":"")+p;
+    });
+    if(buf.trim())out.push(buf.trim());
+  });
+  return out.filter(function(x){return x.replace(/[^\wÀ-ÿ]/g,"").length>1});
+}
+
+/* --- 3) fala com respiro entre frases e prosodia mais suave --- */
+function lrFalar(){
+  if(!LRV)return toast("Este navegador não suporta leitura por voz");
+  LRV.cancel();
+  if(lrI>=lrFrases.length){lrConcluir();return}
+  var txt=lrFrases[lrI];
+  var u=new SpeechSynthesisUtterance(txt);
+  var v=lrVoz();if(v){u.voice=v;u.lang=v.lang}else u.lang="pt-BR";
+  u.rate=Math.max(.5,lrVel*0.94);
+  u.pitch=1.06;
+  u.volume=1;
+  u.onend=function(){
+    if(!lrOn)return;
+    lrI++;
+    if(lrI<lrFrases.length){
+      lrPintar();
+      var pausa=/[.!?]$/.test(txt)?260:(/[,;:]$/.test(txt)?150:110);
+      setTimeout(function(){if(lrOn)lrFalar()},pausa);
+    } else lrConcluir();
+  };
+  u.onerror=function(){lrOn=false;lrPintar()};
+  lrOn=true;lrPausa=false;LRV.speak(u);lrPintar();
+}
+
+/* --- 4) extracao de texto: nao apagar alternativas (que sao <button>) --- */
+function lrTextoDe(el){
+  if(!el) return "";
+  var c=el.cloneNode(true);
+  c.querySelectorAll(".lrico,.lrbar,.rowbtn,.filters,script,style,canvas,iframe,input,select,textarea,.x").forEach(function(n){n.remove()});
+  c.querySelectorAll("button").forEach(function(b){
+    if(b.classList.contains("opt")) return;
+    b.remove();
+  });
+  return (c.textContent||"").replace(/\s+/g," ").trim();
+}
+
+/* --- 5) leitura estruturada da questao em foco --- */
+function lrTextoQuestao(card){
+  if(!card) return "";
+  var p=[];
+  var en=card.querySelector(".q"), cmd=card.querySelector(".cmd");
+  if(en&&en.textContent.trim()) p.push(en.textContent.trim());
+  if(cmd&&cmd.textContent.trim()) p.push(cmd.textContent.trim());
+  var opts=card.querySelectorAll(".opt");
+  opts.forEach(function(o){
+    var k=o.querySelector(".k"), txt=o.querySelector(".k")?o.querySelector(".k").nextElementSibling:null;
+    var letra=k?k.textContent.trim():"";
+    var corpo=txt?txt.textContent.trim():o.textContent.trim();
+    p.push((letra?"Alternativa "+letra+". ":"")+corpo);
+  });
+  var exp=card.querySelector(".exp");
+  if(exp&&exp.textContent.trim()) p.push("Comentário. "+exp.textContent.replace(/\s+/g," ").trim());
+  if(!p.length) p.push(lrTextoDe(card));
+  return p.join(". ").replace(/\.\.+/g,".");
+}
+function lrEhQuestao(el){return !!(el&&(el.id==="qcard"||el.querySelector(".opt")))}
+function lrLerBloco(el){
+  if(!el) return toast("Nada para ler aqui");
+  lrMarcar(el);
+  try{el.scrollIntoView({behavior:"smooth",block:"nearest"})}catch(_){}
+  var titulo=lrEhQuestao(el)?"Questão em áudio":lrTitBloco(el);
+  var texto=lrEhQuestao(el)?lrTextoQuestao(el):lrTextoDe(el);
+  lrIniciarTexto(texto,titulo,function(){ if(!lrEhQuestao(el)) lrProximoBloco(el); else lrMarcar(null) });
+}
+/* blocos incluem o cartao de questoes e flashcards */
+function lrBlocos(){
+  var sec=lrSecao(); if(!sec) return [];
+  var cand=Array.prototype.slice.call(sec.querySelectorAll("#qcard,.card,.hoje,.fxpg,.qwrap,.qbox,article"));
+  return cand.filter(function(el){
+    if(el.closest(".lrbar")) return false;
+    if((el.textContent||"").replace(/\s+/g," ").trim().length<25) return false;
+    return !cand.some(function(o){return o!==el&&o.contains(el)});
+  });
+}
+/* botao "Ouvir questão" usa a leitura estruturada */
+(function(){
+  document.addEventListener("click",function(ev){
+    var b=ev.target.closest&&ev.target.closest("#qouvir");
+    if(!b)return;
+    ev.preventDefault();ev.stopPropagation();
+    var card=document.getElementById("qcard");
+    if(lrOn){lrParar();lrMarcar(null);return}
+    lrBarra();lrLerBloco(card);
+  },true);
+})();
+/* aquece a lista de vozes (Chrome carrega de forma assincrona) */
+(function(){
+  if(!LRV)return;
+  var tenta=0,t=setInterval(function(){
+    tenta++;
+    if(lrVozes().length||tenta>20)clearInterval(t);
+  },300);
+  LRV.onvoiceschanged=function(){try{lrPintar()}catch(_){}};
+})();
+
 </script>
 </body>
 </html>
