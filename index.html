@@ -3349,7 +3349,7 @@ function gateDica(e){
   if(location.protocol==="file:")
     return "O login não funciona abrindo o arquivo direto do computador (<b>file://</b>). Use o endereço publicado (GitHub Pages) ou entre no modo offline.";
   if(c==="auth/unauthorized-domain")
-    return "Domínio não autorizado: <b>"+host+"</b>.<br>Firebase Console → Authentication → Settings → <b>Authorized domains</b> → Add domain → <b>"+host+"</b>.";
+    return "Domínio não autorizado: <b>"+host+"</b>.<br>Firebase Console → Authentication → Settings → <b>Authorized domains</b> → Add domain → <b>"+host+"</b>.<br>Confira também no Google Cloud → APIs e Serviços → Credenciais → ID OAuth → <b>Origens JavaScript autorizadas</b>.";
   if(c==="auth/operation-not-allowed"||c==="auth/configuration-not-found"||c==="auth/admin-restricted-operation")
     return "Este método de login está <b>desativado</b> no Firebase.<br>Firebase Console → Authentication → <b>Sign-in method</b> → ative <b>E-mail/senha</b> e <b>Google</b>.<br>Enquanto isso você pode usar o <b>modo offline</b> abaixo.";
   if(c==="auth/invalid-credential"||c==="auth/wrong-password") return "E-mail ou senha incorretos.";
@@ -3518,29 +3518,57 @@ function rdStatusPintar(){
 }
 setInterval(rdStatusPintar,900); rdStatusPintar();
 
-/* ---------- 2) Login com Google: fluxo por redirecionamento (à prova de bloqueio de pop-up) ---------- */
+/* ---------- 2) Login com Google v11: POP-UP primeiro, redirect só como plano B ---------- */
 var GKEY_PEND="amalgama_google_pend";
+function gateEmIframe(){ try{ return window.self!==window.top }catch(_){ return true } }
+function gateHostOk(){
+  var h=(location.hostname||"").toLowerCase();
+  return !(location.protocol==="file:" || h===""||h==="localhost"&&false);
+}
 async function gateGoogle(btn){
   if(!window.firebase||!firebase.auth) return gateErro("Firebase indisponível nesta página. Verifique a conexão e recarregue.");
   if(location.protocol==="file:") return gateErro(gateDica({code:"file"}));
+  var txt=btn?btn.textContent:"";
   if(btn){btn.disabled=true;btn.textContent="Abrindo o Google..."}
-  try{
-    try{await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)}catch(_){}
-    var prov=gateProv();
-    try{sessionStorage.setItem(GKEY_PEND,"1")}catch(_){}
-    /* alguns navegadores (e o GitHub Pages com COOP) quebram o pop-up: o redirect é o caminho confiável */
-    await firebase.auth().signInWithRedirect(prov);
-    return;
-  }catch(e){
-    try{sessionStorage.removeItem(GKEY_PEND)}catch(_){}
-    /* se o redirect falhar, tenta o pop-up como plano B */
-    try{ await firebase.auth().signInWithPopup(gateProv()); gateAplicar(); }
-    catch(e2){ gateErro(gateDica(e2)); }
+  var restaurar=function(){ if(btn){btn.disabled=false;btn.textContent=txt||"Entrar com Google"} };
+
+  /* Dentro de um iframe (pré-visualização/incorporação) o Google bloqueia o login.
+     Nesse caso abrimos o site em uma aba real em vez de redirecionar para uma URL "estranha". */
+  if(gateEmIframe()){
+    gateErro("O login do Google não funciona dentro de uma pré-visualização incorporada. Abra o site em uma aba própria e tente de novo.");
+    try{ window.open(location.href,"_blank","noopener") }catch(_){}
+    restaurar(); return;
   }
-  if(btn){btn.disabled=false;btn.textContent="Entrar com Google"}
+
+  try{ await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL) }catch(_){}
+
+  try{
+    var res=await firebase.auth().signInWithPopup(gateProv());
+    if(res&&res.user){ try{localStorage.setItem(GATE_KEY,res.user.email||"conta Google")}catch(_){} }
+    try{toast("Conectado com o Google ✅")}catch(_){}
+    try{gateAplicar()}catch(_){}
+    restaurar(); return;
+  }catch(e){
+    var c=(e&&e.code)||"";
+    if(c==="auth/popup-closed-by-user"||c==="auth/cancelled-popup-request"){ restaurar(); return; }
+    if(c==="auth/unauthorized-domain"||c==="auth/operation-not-allowed"||c==="auth/configuration-not-found"||c==="auth/network-request-failed"){
+      gateErro(gateDica(e)); restaurar(); return;
+    }
+    /* pop-up bloqueado pelo navegador → aí sim usamos o redirect */
+    if(c==="auth/popup-blocked"||c==="auth/web-storage-unsupported"||c==="auth/internal-error"){
+      gateErro("O pop-up foi bloqueado pelo navegador. Redirecionando para a página oficial do Google...");
+      try{sessionStorage.setItem(GKEY_PEND,"1")}catch(_){}
+      try{ await firebase.auth().signInWithRedirect(gateProv()); return; }
+      catch(e2){ try{sessionStorage.removeItem(GKEY_PEND)}catch(_){} gateErro(gateDica(e2)); }
+    }else{
+      gateErro(gateDica(e));
+    }
+  }
+  restaurar();
 }
 (function(){
   if(!window.firebase||!firebase.auth)return;
+  var pend=""; try{pend=sessionStorage.getItem(GKEY_PEND)||""}catch(_){}
   firebase.auth().getRedirectResult().then(function(res){
     try{sessionStorage.removeItem(GKEY_PEND)}catch(_){}
     if(res&&res.user){ try{localStorage.setItem(GATE_KEY,res.user.email||"conta Google")}catch(_){}
@@ -3549,6 +3577,7 @@ async function gateGoogle(btn){
     }
   }).catch(function(e){
     try{sessionStorage.removeItem(GKEY_PEND)}catch(_){}
+    if(!pend) return; /* só mostra erro se o usuário realmente tentou entrar */
     setTimeout(function(){try{gateErro(gateDica(e))}catch(_){}} ,400);
   });
 })();
@@ -3678,7 +3707,7 @@ try{ if(typeof view!=="undefined"&&view==="radar") renderRadar(); }catch(e){}
 
 
 <script>
-/* ================= v10 — Simulado Interativo remodelado, correções mobile e player do Radar ================= */
+/* ================= v11 — Simulado Interativo remodelado, correções mobile e player do Radar ================= */
 (function(){var s=document.createElement("style");s.textContent=`
 /* ---------- Correções gerais de mobile ---------- */
 html,body{max-width:100%;overflow-x:hidden}
