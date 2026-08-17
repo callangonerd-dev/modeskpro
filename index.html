@@ -2416,7 +2416,7 @@ function gateMontar(){
     <div class="sep">ou use e-mail e senha</div>
     <input class="fld" id="gem" type="email" placeholder="seu@email.com" autocomplete="email" value="${last}">
     <input class="fld" id="gpw" type="password" style="margin-top:8px" placeholder="senha" autocomplete="current-password">
-    <div class="rowbtn" style="margin-top:10px"><button class="btn p" id="gin">Entrar</button>
+    <div class="rowbtn"><button class="btn p" id="gin">Entrar</button>
       <button class="btn s" id="gnew">Criar conta</button>
       <button class="btn s" id="greset">Esqueci a senha</button></div>
     <div class="gsm">Sessão salva com segurança neste navegador.</div>
@@ -2531,7 +2531,7 @@ function gateMontar(){
     <div class="sep">ou use e-mail e senha</div>
     <input class="fld" id="gem" type="email" placeholder="seu@email.com" autocomplete="email" value="${last}">
     <input class="fld" id="gpw" type="password" style="margin-top:8px" placeholder="senha" autocomplete="current-password">
-    <div class="rowbtn" style="margin-top:10px"><button class="btn p" id="gin">Entrar</button>
+    <div class="rowbtn"><button class="btn p" id="gin">Entrar</button>
       <button class="btn s" id="gnew">Criar conta</button>
       <button class="btn s" id="greset">Esqueci a senha</button></div>
     <div class="gerr" id="gerr"></div>
@@ -3060,7 +3060,7 @@ function gateMontar(){
     <div class="sep">ou e-mail e senha</div>
     <input class="fld" id="gem" type="email" placeholder="seu@email.com" autocomplete="email" value="${esc(last)}">
     <input class="fld" id="gpw" type="password" style="margin-top:8px" placeholder="sua senha" autocomplete="current-password">
-    <div class="rowbtn" style="margin-top:10px"><button class="btn p" id="gin">Entrar</button>
+    <div class="rowbtn"><button class="btn p" id="gin">Entrar</button>
       <button class="btn s" id="gnew">Criar conta</button>
       <button class="btn s" id="greset">Esqueci a senha</button></div>
     <div class="gerr" id="gerr"></div>
@@ -3147,7 +3147,16 @@ try{gateAplicar()}catch(e){}
  s.textContent=`#authgate .gerr{display:none}#authgate .gerr.on{display:block}
  #authgate .gok{margin:10px 0 0;padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.45;
   border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--fg2)}
- #authgate .glink{background:none;border:0;color:var(--mut);font-size:12px;text-decoration:underline;cursor:pointer;margin-top:12px;width:100%}`;
+ #authgate .glink{background:none;border:0;color:var(--mut);font-size:12px;text-decoration:underline;cursor:pointer;margin-top:12px;width:100%}
+ #authgate .rowbtn{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+ #authgate .rowbtn #gin{grid-column:1 / -1}
+ #authgate .rowbtn .btn{box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:44px;padding:10px 8px;
+   display:inline-flex;align-items:center;justify-content:center;text-align:center;white-space:normal;line-height:1.2;font-size:13.5px;margin:0}
+ #authgate .gbox{box-sizing:border-box;overflow:hidden}
+ #authgate .gbox *{box-sizing:border-box;max-width:100%}
+ #authgate .fld{width:100%}
+ #authgate #ggoogle{box-sizing:border-box;width:100%;min-height:46px;display:inline-flex;align-items:center;justify-content:center;margin:0}
+ #authgate .btn:hover{transform:none}`;
  document.head.appendChild(s)})();
 
 var OFFLINE_KEY="amalgama_offline";
@@ -3191,7 +3200,7 @@ function gateMontar(){
     +'<div class="sep">ou use e-mail e senha</div>'
     +'<input class="fld" id="gem" type="email" placeholder="seu@email.com" autocomplete="email" value="'+mail+'">'
     +'<input class="fld" id="gpw" type="password" style="margin-top:8px" placeholder="senha (mín. 6 caracteres)" autocomplete="current-password">'
-    +'<div class="rowbtn" style="margin-top:10px"><button class="btn p" id="gin">Entrar</button>'
+    +'<div class="rowbtn"><button class="btn p" id="gin">Entrar</button>'
     +'<button class="btn s" id="gnew">Criar conta</button>'
     +'<button class="btn s" id="greset">Esqueci a senha</button></div>'
     +'<div class="gerr" id="gerr"></div>'
